@@ -3,7 +3,35 @@
 ## 1. System Design
 
 **a. Initial design**
-
+- Potential actions:
+  - add a pet
+  - schedule a task
+  - cancel a task
+  - view today's tasks
+- Objects:
+  - User
+    - user_id
+    - username
+    - pets
+    - add_pet()
+    - schedule_task()
+    - execute_task()
+  - Pet
+    - pet_id
+    - pet_name
+    - owner
+    - sex
+    - age
+    - species
+    - breed
+  - Task
+    - name
+    - description
+    - due
+    - status
+  - Planner
+    - name
+    - make_plan()
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
 
@@ -23,7 +51,7 @@
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
+- Describe one tradeoff your scheduler makes.$$
 - Why is that tradeoff reasonable for this scenario?
 
 ---
