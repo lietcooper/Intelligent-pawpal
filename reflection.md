@@ -3,42 +3,49 @@
 ## 1. System Design
 
 **a. Initial design**
-- Potential actions:
-  - add a pet
-  - schedule a task
-  - cancel a task
-  - view today's tasks
-- Objects:
-  - User
-    - user_id
-    - username
-    - pets
-    - add_pet()
-    - schedule_task()
-    - execute_task()
-  - Pet
-    - pet_id
-    - pet_name
-    - owner
-    - sex
-    - age
-    - species
-    - breed
-  - Task
-    - name
-    - description
-    - due
-    - status
-  - Planner
-    - name
-    - make_plan()
 - Briefly describe your initial UML design.
+  - Potential actions:
+    - add a pet
+    - schedule a task
+    - cancel a task
+    - view today's tasks
+  - Objects:
+    - User
+      - user_id
+      - username
+      - pets
+      - add_pet()
+      - schedule_task()
+      - execute_task()
+    - Pet
+      - pet_id
+      - pet_name
+      - owner
+      - sex
+      - age
+      - species
+      - breed
+    - Task
+      - name
+      - description
+      - due
+      - status
+    - Planner
+      - name
+      - make_plan()
+
 - What classes did you include, and what responsibilities did you assign to each?
+  - The initial design contains four classes. `User` is the user of the application and the owner of the pets, with the accessibility to manage pets and pets' tasks. `Pet` is the pets. `Task` is the differente tasks to be scheduled and executed. `Planner` is the object that makes everyday's plan for pets.
 
 **b. Design changes**
 
 - Did your design change during implementation?
+  - Yes
 - If yes, describe at least one change and why you made it.
+  1. Pet now tracks its own tasks — added a self.tasks list so you can see all tasks associated with a specific pet.                         
+  2. Task now references a pet — added a pet parameter so every task knows which pet it belongs to, and gained execute() and cancel() methods to manage its own status instead of relying on User. 
+  3. Planner is now the single source of truth for scheduling — it holds the master self.tasks list, owns schedule_task() and cancel_task(), and provides get_tasks_for_today() to query pending tasks by date. It also takes a user reference so it knows who it's planning for.
+  4. User delegates to Planner — User automatically creates a Planner on init and schedule_task() now forwards to self.planner.schedule_task(). execute_task() calls task.execute() directly since execution is just a status change on the task itself.      
 
 ---
 
