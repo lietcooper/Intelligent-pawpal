@@ -19,9 +19,13 @@ class Pet:
         return f"Pet({self.pet_name}, {self.species}/{self.breed})"
 
 
+RECURRENCE_DELTA = {"daily": timedelta(days=1), "weekly": timedelta(weeks=1)}
+
+
 class Task:
     def __init__(self, name, description, due, pet, duration_minutes=30,
-                 priority="medium", preferred_time=None, status="pending"):
+                 priority="medium", preferred_time=None, status="pending",
+                 recurrence=None):
         self.name = name
         self.description = description
         self.due = due
@@ -30,6 +34,7 @@ class Task:
         self.priority = priority
         self.preferred_time = preferred_time  # e.g. time(8, 0) for 8 AM
         self.status = status
+        self.recurrence = recurrence  # None | "daily" | "weekly"
         # Set after scheduling
         self.scheduled_start = None
         self.scheduled_end = None
@@ -54,14 +59,107 @@ class Planner:
         self.day_start = day_start
         self.day_end = day_end
 
+    def _conflict_warning(self, task):
+        """Return a warning string if task overlaps an existing task, else None.
+
+        Uses preferred_time + duration as the interval when scheduled_start is
+        not yet set. O(n) scan — intentionally lightweight, never raises.
+        """
+        if task.scheduled_start is not None:
+            new_start, new_end = task.scheduled_start, task.scheduled_end
+        elif task.preferred_time is not None:
+            new_start = datetime.combine(task.due, task.preferred_time)
+            new_end = new_start + timedelta(minutes=task.duration_minutes)
+        else:
+            return None  # no time info to compare
+
+        for existing in self.tasks:
+            if existing.due != task.due or existing.status in ("done", "cancelled"):
+                continue
+            if existing.scheduled_start is not None:
+                ex_start, ex_end = existing.scheduled_start, existing.scheduled_end
+            elif existing.preferred_time is not None:
+                ex_start = datetime.combine(existing.due, existing.preferred_time)
+                ex_end = ex_start + timedelta(minutes=existing.duration_minutes)
+            else:
+                continue
+
+            if new_start < ex_end and new_end > ex_start:
+                kind = "same pet" if task.pet is existing.pet else "different pet"
+                return (
+                    f"Warning: '{task.name}' "
+                    f"({new_start.strftime('%I:%M %p')}-{new_end.strftime('%I:%M %p')}) "
+                    f"conflicts with '{existing.name}' "
+                    f"({ex_start.strftime('%I:%M %p')}-{ex_end.strftime('%I:%M %p')}) "
+                    f"[{kind}]"
+                )
+        return None
+
     def schedule_task(self, task):
-        """Add a task to the planner and its associated pet."""
+        """Add a task to the planner and its associated pet.
+
+        Returns a warning string if a time conflict is detected, else None.
+        The task is always added regardless — callers decide what to do with
+        the warning.
+        """
+        warning = self._conflict_warning(task)
         self.tasks.append(task)
         task.pet.tasks.append(task)
+        return warning
 
     def cancel_task(self, task):
         """Cancel a scheduled task."""
         task.cancel()
+
+    def complete_task(self, task):
+        """Mark a task done and auto-schedule the next occurrence for recurring tasks.
+
+        Returns the newly created Task if recurrence fired, otherwise None.
+        """
+        task.execute()
+        delta = RECURRENCE_DELTA.get(task.recurrence)
+        if delta is None:
+            return None
+        next_task = Task(
+            name=task.name,
+            description=task.description,
+            due=task.due + delta,
+            pet=task.pet,
+            duration_minutes=task.duration_minutes,
+            priority=task.priority,
+            preferred_time=task.preferred_time,
+            recurrence=task.recurrence,
+        )
+        self.schedule_task(next_task)
+        return next_task
+
+    def find_conflicts(self, tasks=None):
+        """Return all overlapping task pairs among scheduled tasks.
+
+        Checks both same-pet and cross-pet overlaps. Only tasks with a
+        scheduled_start are considered (unscheduled tasks are skipped).
+
+        Args:
+            tasks: list of Task objects to check. Defaults to all planner tasks.
+
+        Returns:
+            list of dicts, each with keys:
+                "task_a", "task_b"  — the two conflicting tasks
+                "overlap"           — "same_pet" | "cross_pet"
+        """
+        source = [t for t in (self.tasks if tasks is None else tasks)
+                  if t.scheduled_start is not None]
+        conflicts = []
+        for i in range(len(source)):
+            for j in range(i + 1, len(source)):
+                a, b = source[i], source[j]
+                if a.scheduled_start < b.scheduled_end and a.scheduled_end > b.scheduled_start:
+                    conflicts.append({
+                        "task_a": a,
+                        "task_b": b,
+                        "overlap": "same_pet" if a.pet is b.pet else "cross_pet",
+                    })
+        return conflicts
 
     def get_tasks_for_today(self):
         """Return all pending tasks due today."""
@@ -217,9 +315,12 @@ class User:
         self.pets.append(pet)
 
     def schedule_task(self, task):
-        """Delegate task scheduling to the planner."""
-        self.planner.schedule_task(task)
+        """Delegate task scheduling to the planner.
+
+        Returns a warning string if a time conflict is detected, else None.
+        """
+        return self.planner.schedule_task(task)
 
     def execute_task(self, task):
-        """Mark a task as completed."""
-        task.execute()
+        """Mark a task as completed, spawning the next occurrence if recurring."""
+        return self.planner.complete_task(task)
