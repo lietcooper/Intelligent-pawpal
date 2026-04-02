@@ -107,12 +107,16 @@
 **a. How you used AI**
 
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
+  - for almost every task, from planning to implementing as well as optimizing.
 - What kinds of prompts or questions were most helpful?
+  - list the pros and cons for each option.
 
 **b. Judgment and verification**
 
 - Describe one moment where you did not accept an AI suggestion as-is.
+  - No
 - How did you evaluate or verify what the AI suggested?
+  - based on my knowleage and then run and test AI's suggestion to judge.
 
 ---
 
@@ -121,12 +125,16 @@
 **a. What you tested**
 
 - What behaviors did you test?
+  - basic CRUD, sorting, conflict detecting
 - Why were these tests important?
+  - Yes, becuase they include edge cases.
 
 **b. Confidence**
 
 - How confident are you that your scheduler works correctly?
+  - Very.
 - What edge cases would you test next if you had more time?
+  - N/A
 
 ---
 
@@ -135,11 +143,14 @@
 **a. What went well**
 
 - What part of this project are you most satisfied with?
+    - Designing
 
 **b. What you would improve**
 
 - If you had another iteration, what would you improve or redesign?
+  - add more function.
 
 **c. Key takeaway**
 
 - What is one important thing you learned about designing systems or working with AI on this project?
+  - AI can help design system, but the developer still needs their own judgement because the solutions may not satisfy the requirements.
