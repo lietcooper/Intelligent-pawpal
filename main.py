@@ -14,25 +14,51 @@ def main():
 
     today = date.today()
 
-    # Mochi's tasks
-    user.schedule_task(Task("Morning walk", "Walk Mochi around the park", today, mochi,
-                            duration_minutes=30, priority="high", preferred_time=time(7, 30)))
-    user.schedule_task(Task("Breakfast", "Feed Mochi kibble and wet food", today, mochi,
-                            duration_minutes=15, priority="high", preferred_time=time(8, 0)))
+    # Tasks added intentionally out of order to exercise sort_by_time
     user.schedule_task(Task("Play fetch", "Fetch session in the yard", today, mochi,
                             duration_minutes=25, priority="medium"))
-
-    # Whiskers' tasks
-    user.schedule_task(Task("Litter box cleanup", "Clean Whiskers' litter box", today, whiskers,
-                            duration_minutes=10, priority="high", preferred_time=time(7, 0)))
     user.schedule_task(Task("Vet checkup", "Annual vaccination for Whiskers", today, whiskers,
                             duration_minutes=60, priority="high", preferred_time=time(10, 0)))
+    user.schedule_task(Task("Breakfast", "Feed Mochi kibble and wet food", today, mochi,
+                            duration_minutes=15, priority="high", preferred_time=time(8, 0)))
     user.schedule_task(Task("Grooming", "Brush Whiskers' coat", today, whiskers,
                             duration_minutes=20, priority="low"))
+    user.schedule_task(Task("Litter box cleanup", "Clean Whiskers' litter box", today, whiskers,
+                            duration_minutes=10, priority="high", preferred_time=time(7, 0)))
+    user.schedule_task(Task("Morning walk", "Walk Mochi around the park", today, mochi,
+                            duration_minutes=30, priority="high", preferred_time=time(7, 30)))
 
-    # Generate and print the plan
+    # --- 1. Raw order (as added) ---
+    print("=" * 50)
+    print("  Tasks as added (unordered)")
+    print("=" * 50)
+    for t in user.planner.tasks:
+        pt = t.preferred_time.strftime("%I:%M %p") if t.preferred_time else "no pref"
+        print(f"  {t.name:<22} [{t.priority:<6}]  preferred: {pt}")
+
+    # --- 2. Filtered: pending tasks for today ---
+    print()
+    print("=" * 50)
+    print("  Filtered: pending tasks for today")
+    print("=" * 50)
+    pending = user.planner.get_tasks_for_date(today)
+    for t in pending:
+        print(f"  {t.name:<22} status: {t.status}")
+
+    # --- 3. sort_by_time before make_plan (uses preferred_time fallback) ---
+    print()
+    print("=" * 50)
+    print("  Sorted by time (pre-schedule, preferred_time fallback)")
+    print("=" * 50)
+    pre_sorted = user.planner.sort_by_time(pending)
+    for t in pre_sorted:
+        pt = t.preferred_time.strftime("%I:%M %p") if t.preferred_time else "none"
+        print(f"  {t.name:<22} preferred: {pt}")
+
+    # --- 4. Build the plan ---
     scheduled, explanations = user.planner.make_plan(today)
 
+    print()
     print("=" * 50)
     print(f"  Today's Schedule for {user.username}")
     print(f"  Date: {today.strftime('%A, %B %d, %Y')}")
@@ -40,8 +66,21 @@ def main():
     print("=" * 50)
     for line in explanations:
         print(f"  {line}")
+
+    # --- 5. sort_by_time after make_plan (uses scheduled_start) ---
+    print()
     print("=" * 50)
-    print(f"  Total tasks: {len(scheduled)}")
+    print("  Sorted by time (post-schedule, scheduled_start)")
+    print("=" * 50)
+    post_sorted = user.planner.sort_by_time(scheduled)
+    for t in post_sorted:
+        print(f"  {t.scheduled_start.strftime('%I:%M %p')} - "
+              f"{t.scheduled_end.strftime('%I:%M %p')}: "
+              f"{t.name} ({t.pet.pet_name})")
+
+    print()
+    print("=" * 50)
+    print(f"  Total tasks scheduled: {len(scheduled)}")
     print("=" * 50)
 
 

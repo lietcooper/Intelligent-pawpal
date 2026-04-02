@@ -72,6 +72,25 @@ class Planner:
         """Return all pending tasks for a specific date."""
         return [t for t in self.tasks if t.due == target_date and t.status == "pending"]
 
+    def sort_by_time(self, tasks=None):
+        """Return tasks sorted by scheduled_start, falling back to preferred_time.
+
+        Args:
+            tasks: list of Task objects to sort. Defaults to all planner tasks.
+
+        Tasks with no time set are placed at the end, ordered by priority.
+        """
+        source = self.tasks if tasks is None else tasks
+
+        def _sort_key(task):
+            if task.scheduled_start is not None:
+                return (0, task.scheduled_start)
+            if task.preferred_time is not None:
+                return (1, datetime.combine(task.due, task.preferred_time))
+            return (2, datetime.max)
+
+        return sorted(source, key=_sort_key)
+
     def make_plan(self, target_date=None):
         """Build a time-ordered schedule for the given date.
 
@@ -111,20 +130,24 @@ class Planner:
             return False
 
         def _find_slot(duration_minutes, earliest):
-            """Find the earliest available slot starting at or after `earliest`."""
+            """Find the earliest available slot starting at or after `earliest`.
+
+            Single linear scan over sorted occupied intervals — O(n) per call
+            instead of re-sorting on every conflict.
+            """
             cursor = earliest
+            duration = timedelta(minutes=duration_minutes)
             end_boundary = _dt(self.day_end)
-            while cursor + timedelta(minutes=duration_minutes) <= end_boundary:
-                candidate_end = cursor + timedelta(minutes=duration_minutes)
-                if not _conflicts(cursor, candidate_end):
-                    return cursor
-                # Jump past the conflicting block
-                for occ_start, occ_end in sorted(occupied):
-                    if cursor < occ_end and candidate_end > occ_start:
-                        cursor = occ_end
-                        break
-                else:
-                    cursor += timedelta(minutes=5)
+
+            for occ_start, occ_end in sorted(occupied):
+                if occ_end <= cursor:
+                    continue  # entirely before cursor, skip
+                if cursor + duration <= occ_start:
+                    break     # gap before this block is wide enough
+                cursor = occ_end  # overlap: push past this block
+
+            if cursor + duration <= end_boundary:
+                return cursor
             return None
 
         # Phase 1: schedule preferred-time tasks
