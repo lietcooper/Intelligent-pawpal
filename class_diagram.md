@@ -4,9 +4,10 @@ classDiagram
         +String user_id
         +String username
         +List~Pet~ pets
-        +add_pet()
-        +schedule_task()
-        +execute_task()
+        +Planner planner
+        +add_pet(pet)
+        +schedule_task(task) String
+        +execute_task(task) Task
     }
 
     class Pet {
@@ -17,22 +18,45 @@ classDiagram
         +int age
         +String species
         +String breed
+        +List~Task~ tasks
     }
 
     class Task {
         +String name
         +String description
-        +DateTime due
+        +Date due
+        +Pet pet
+        +int duration_minutes
+        +String priority
+        +Time preferred_time
         +String status
+        +String recurrence
+        +DateTime scheduled_start
+        +DateTime scheduled_end
+        +execute()
+        +cancel()
     }
 
     class Planner {
         +String name
-        +make_plan()
+        +User user
+        +List~Task~ tasks
+        +Time day_start
+        +Time day_end
+        +schedule_task(task) String
+        +cancel_task(task)
+        +complete_task(task) Task
+        +find_conflicts(tasks) List
+        +get_tasks_for_today() List
+        +get_tasks_for_date(target_date) List
+        +sort_by_time(tasks) List
+        +make_plan(target_date) Tuple
+        -_conflict_warning(task) String
     }
 
+    User "1" --> "1" Planner : owns
     User "1" --> "*" Pet : owns
-    User "1" --> "*" Task : schedules
     Pet "1" --> "*" Task : has
-    Planner "1" --> "*" Task : plans
+    Planner "1" --> "*" Task : manages
+    Task "*" --> "1" Pet : belongs to
 ```

@@ -4,25 +4,21 @@ from pawpal_system import User, Pet, Task
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
-# --- Session state: persist objects across reruns ---
+# --- Session state ---
 if "user" not in st.session_state:
     st.session_state.user = User("u1", "Jordan")
-
 if "pets" not in st.session_state:
-    st.session_state.pets = {}  # pet_name -> Pet
-
+    st.session_state.pets = {}
 if "tasks" not in st.session_state:
     st.session_state.tasks = []
-
 if "schedule" not in st.session_state:
-    st.session_state.schedule = None
+    st.session_state.schedule = None  # (scheduled_tasks, explanations)
 
 user = st.session_state.user
 
 # --- Header ---
 st.title("🐾 PawPal+")
 st.caption("A pet care planning assistant that schedules your pet's day.")
-
 st.divider()
 
 # --- Owner setup ---
@@ -65,7 +61,7 @@ if st.session_state.pets:
 st.divider()
 
 # --- Task management ---
-st.subheader("Tasks")
+st.subheader("Add a Task")
 
 if not st.session_state.pets:
     st.info("Add a pet first before scheduling tasks.")
@@ -78,10 +74,15 @@ else:
         duration = st.number_input("Duration (minutes)", min_value=5, max_value=240, value=30)
         priority = st.selectbox("Priority", ["high", "medium", "low"])
 
-    use_preferred = st.checkbox("Set a preferred time?")
-    preferred_time = None
-    if use_preferred:
-        preferred_time = st.time_input("Preferred time", value=time(8, 0))
+    col3, col4 = st.columns(2)
+    with col3:
+        use_preferred = st.checkbox("Set a preferred time?")
+        preferred_time = None
+        if use_preferred:
+            preferred_time = st.time_input("Preferred time", value=time(8, 0))
+    with col4:
+        recurrence = st.selectbox("Recurrence", ["none", "daily", "weekly"])
+        recurrence_val = None if recurrence == "none" else recurrence
 
     if st.button("Add task"):
         pet = st.session_state.pets[selected_pet]
@@ -90,24 +91,45 @@ else:
             duration_minutes=int(duration),
             priority=priority,
             preferred_time=preferred_time,
+            recurrence=recurrence_val,
         )
-        user.schedule_task(task)
+        warning = user.schedule_task(task)
         st.session_state.tasks.append(task)
-        st.success(f"Scheduled '{task_title}' for {selected_pet}!")
+        # Reset cached schedule so stale results aren't shown
+        st.session_state.schedule = None
 
-    if st.session_state.tasks:
-        st.write("Current tasks:")
-        task_data = [
-            {
-                "Task": t.name,
-                "Pet": t.pet.pet_name,
-                "Duration": f"{t.duration_minutes} min",
-                "Priority": t.priority,
-                "Preferred": t.preferred_time.strftime("%I:%M %p") if t.preferred_time else "—",
-            }
-            for t in st.session_state.tasks
-        ]
-        st.table(task_data)
+        if warning:
+            st.warning(
+                f"Task added, but a time conflict was detected:\n\n"
+                f"**{warning}**\n\n"
+                "You can still generate a schedule — PawPal+ will find the next available slot."
+            )
+        else:
+            st.success(f"Scheduled '{task_title}' for {selected_pet}!")
+
+# --- Task list (sorted by time) ---
+pending_tasks = [t for t in st.session_state.tasks if t.status == "pending"]
+if pending_tasks:
+    st.divider()
+    st.subheader("Pending Tasks")
+    sorted_tasks = user.planner.sort_by_time(pending_tasks)
+    task_data = []
+    for t in sorted_tasks:
+        if t.scheduled_start:
+            time_str = t.scheduled_start.strftime("%I:%M %p")
+        elif t.preferred_time:
+            time_str = f"{t.preferred_time.strftime('%I:%M %p')} (preferred)"
+        else:
+            time_str = "—"
+        task_data.append({
+            "Time": time_str,
+            "Task": t.name,
+            "Pet": t.pet.pet_name,
+            "Duration": f"{t.duration_minutes} min",
+            "Priority": t.priority,
+            "Repeats": t.recurrence or "—",
+        })
+    st.table(task_data)
 
 st.divider()
 
@@ -119,9 +141,39 @@ if st.button("Generate schedule"):
         st.warning("Add some tasks first.")
     else:
         scheduled, explanations = user.planner.make_plan(date.today())
-        st.session_state.schedule = explanations
+        st.session_state.schedule = (scheduled, explanations)
 
 if st.session_state.schedule:
-    for line in st.session_state.schedule:
-        st.write(f"• {line}")
-    st.success(f"Total tasks scheduled: {len(st.session_state.schedule)}")
+    scheduled, explanations = st.session_state.schedule
+
+    if not scheduled:
+        st.info("No tasks could be scheduled for today.")
+    else:
+        st.caption(f"{len(scheduled)} task(s) scheduled")
+
+        for explanation in explanations:
+            if "preferred time conflict" in explanation:
+                st.warning(explanation)
+            else:
+                st.success(explanation)
+
+        # --- Conflict report ---
+        conflicts = user.planner.find_conflicts(scheduled)
+        if conflicts:
+            st.divider()
+            st.error(
+                f"**{len(conflicts)} scheduling conflict(s) detected.**  \n"
+                "Review the overlapping tasks below and consider adjusting times or durations."
+            )
+            for c in conflicts:
+                a, b = c["task_a"], c["task_b"]
+                kind_label = "Same pet" if c["overlap"] == "same_pet" else "Different pets"
+                st.warning(
+                    f"**{kind_label}** conflict:  \n"
+                    f"• **{a.name}** ({a.pet.pet_name}) "
+                    f"{a.scheduled_start.strftime('%I:%M %p')} – {a.scheduled_end.strftime('%I:%M %p')}  \n"
+                    f"• **{b.name}** ({b.pet.pet_name}) "
+                    f"{b.scheduled_start.strftime('%I:%M %p')} – {b.scheduled_end.strftime('%I:%M %p')}"
+                )
+        else:
+            st.info("No conflicts — your schedule looks clean!")
