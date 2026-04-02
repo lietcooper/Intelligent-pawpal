@@ -35,9 +35,11 @@ class Task:
         self.scheduled_end = None
 
     def execute(self):
+        """Mark the task as done."""
         self.status = "done"
 
     def cancel(self):
+        """Mark the task as cancelled."""
         self.status = "cancelled"
 
     def __repr__(self):
@@ -53,17 +55,21 @@ class Planner:
         self.day_end = day_end
 
     def schedule_task(self, task):
+        """Add a task to the planner and its associated pet."""
         self.tasks.append(task)
         task.pet.tasks.append(task)
 
     def cancel_task(self, task):
+        """Cancel a scheduled task."""
         task.cancel()
 
     def get_tasks_for_today(self):
+        """Return all pending tasks due today."""
         today = date.today()
         return [t for t in self.tasks if t.due == today and t.status == "pending"]
 
     def get_tasks_for_date(self, target_date):
+        """Return all pending tasks for a specific date."""
         return [t for t in self.tasks if t.due == target_date and t.status == "pending"]
 
     def make_plan(self, target_date=None):
@@ -183,11 +189,14 @@ class User:
         self.planner = Planner(f"{username}_planner", self)
 
     def add_pet(self, pet):
+        """Register a pet under this user."""
         pet.owner = self
         self.pets.append(pet)
 
     def schedule_task(self, task):
+        """Delegate task scheduling to the planner."""
         self.planner.schedule_task(task)
 
     def execute_task(self, task):
+        """Mark a task as completed."""
         task.execute()
