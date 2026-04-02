@@ -61,6 +61,45 @@
 - Describe one tradeoff your scheduler makes.$$
 - Why is that tradeoff reasonable for this scenario?
 
+ _conflict_warning (lightweight, at add-time)
+```
+┌──────────────────────────┬────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐  │         Tradeoff         │                                                                     Detail                                                                     │  ├──────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Preferred time as a      │ Uses preferred_time + duration as the interval — but make_plan may place the task somewhere else entirely, so a warning can be a false         │
+│ proxy                    │ positive                                                                                                                                       │  ├──────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ First conflict only      │ Returns on the first overlap found, so a task clashing with two others only reports one warning                                                │  ├──────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ No cross-date awareness  │ Skips tasks on different due dates, so a task ending at 11:59 PM won't warn against one starting at midnight the next day                      │  ├──────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Advisory, not blocking   │ The task is always added; callers that ignore the return value silently lose the warning                                                       │  └──────────────────────────┴────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+  find_conflicts (exhaustive, post-schedule)
+
+  ```
+┌──────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │       Tradeoff       │                                                      Detail                                                       │
+  ├──────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ O(n²) pairwise scan  │ Every task is compared against every other — fine for a handful of pets/tasks, but grows quadratically with scale │
+  ├──────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ scheduled_start only │ Skips any task without a confirmed slot, so unscheduled tasks are invisible to it                                 │
+  ├──────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ No severity ranking  │ All conflicts are equal; a 5-minute overlap and a full-day double-book look the same in the output                │
+  └──────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  ```
+  _find_slot (greedy scheduler)
+
+  ```
+┌────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │            Tradeoff            │                                                                  Detail                                                                  │
+  ├────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Greedy, not optimal            │ Takes the first open slot after earliest — doesn't look ahead to find a placement that creates less fragmentation                        │
+  ├────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Preferred times are            │ A preferred-time task that can't fit is silently rescheduled; there's no way to distinguish "I really need 8 AM" from "8 AM is nice to   │
+  │ best-effort                    │ have"                                                                                                                                    │
+  ├────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ No buffer between tasks        │ Slots are packed end-to-end with zero travel or transition time between them                                                             │
+  └────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  ```
+
+  The core tension is speed vs. accuracy: _conflict_warning is cheap and early but works on hints, while find_conflicts is accurate but only useful after the full plan is built.
+
 ---
 
 ## 3. AI Collaboration
