@@ -14,9 +14,10 @@ The data flow is:
 2. `pawpal_system.py` generates a daily schedule and conflict report.
 3. `ScheduleContext` converts the current app state into text.
 4. `KnowledgeBase` retrieves relevant Markdown guidance from `knowledge/`.
-5. `CareAssistant` sends the grounded prompt to OpenAI when `OPENAI_API_KEY` is set.
-6. If no key exists or the model call fails, the assistant returns a deterministic local fallback.
-7. The user reviews the answer and source filenames in Streamlit.
+5. The user selects `Local fallback`, `OpenAI`, or `Gemini` in the assistant panel.
+6. `CareAssistant` sends the grounded prompt to the selected model when the matching API key is set.
+7. If no key exists or the model call fails, the assistant returns a deterministic local fallback.
+8. The user reviews the answer and source filenames in Streamlit.
 
 Tests check retrieval, fallback behavior, mocked model calls, and the original planner logic.
 
@@ -26,7 +27,7 @@ Requirements:
 
 - Python 3.10+
 - Dependencies in `requirements.txt`
-- Optional OpenAI API key for model-generated responses
+- Optional OpenAI or Gemini API key for model-generated responses
 
 Install and run:
 
@@ -37,12 +38,21 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Optional model setup:
+Optional OpenAI setup:
 
 ```bash
 export OPENAI_API_KEY="your-api-key"
 streamlit run app.py
 ```
+
+Optional Gemini setup:
+
+```bash
+export GEMINI_API_KEY="your-api-key"
+streamlit run app.py
+```
+
+In the app, choose `OpenAI`, `Gemini`, or `Local fallback` from the AI Care Assistant provider menu. You can also edit the model name, such as `gpt-4o-mini` or `gemini-2.5-flash`.
 
 Run tests:
 
@@ -92,11 +102,11 @@ Recommendation: Protect high-priority tasks first, especially medication, meals,
 Sources used: schedule_guidelines.md, dog_care.md, cat_care.md
 ```
 
-### Example 3: No OpenAI key
+### Example 3: No model API key
 
 Input:
 
-- User clicks `Explain and improve schedule` without setting `OPENAI_API_KEY`.
+- User clicks `Explain and improve schedule` with `Local fallback`, or selects OpenAI/Gemini without setting the matching API key.
 
 Result:
 
@@ -108,7 +118,8 @@ The app still returns a local fallback response with retrieved source filenames.
 
 - Local Markdown RAG keeps the project easy to run and inspect.
 - Keyword retrieval was chosen over a vector database because the knowledge base is small.
-- OpenAI is optional so graders and contributors can run the app without credentials.
+- OpenAI and Gemini are optional so graders and contributors can run the app without credentials.
+- Provider selection is exposed in the UI so users can compare model output or stay fully local.
 - The AI logic lives in `ai_assistant.py` instead of `app.py` so it can be tested directly.
 - Tests mock the model path to avoid network calls and keep results reproducible.
 
@@ -121,7 +132,7 @@ The test suite covers:
 - Scheduling guidance retrieval for conflicts
 - Schedule context formatting
 - Local fallback output without an API key
-- Mocked OpenAI model calls
+- Mocked OpenAI and Gemini model calls
 - Model error fallback behavior
 - Existing task lifecycle, recurrence, conflict detection, sorting, and scheduling behavior
 
@@ -133,15 +144,15 @@ What was limited: keyword retrieval is simple and transparent, but it is less fl
 
 The RAG Care Assistant is evaluated with automated tests, logging, error handling, and human review in the Streamlit UI.
 
-- Automated tests: `pytest -v` currently runs 27 tests. The AI-specific tests check Markdown loading, species-aware retrieval, conflict-guidance retrieval, schedule context formatting, local fallback output, mocked OpenAI output, and model-error fallback.
-- Logging and error handling: `ai_assistant.py` logs loaded knowledge, retrieved source files, and model-call failures. If OpenAI is unavailable or returns an error, the app falls back to a deterministic local response instead of crashing.
+- Automated tests: `pytest -v` currently runs 28 tests. The AI-specific tests check Markdown loading, species-aware retrieval, conflict-guidance retrieval, schedule context formatting, local fallback output, mocked OpenAI output, mocked Gemini output, and model-error fallback.
+- Logging and error handling: `ai_assistant.py` logs loaded knowledge, retrieved source files, and model-call failures. If the selected provider is unavailable or returns an error, the app falls back to a deterministic local response instead of crashing.
 - Human evaluation: the Streamlit UI shows the answer and source filenames, so a reviewer can check whether the recommendation is grounded in retrieved guidance and the actual schedule.
 
 Latest evaluation summary:
 
 ```text
-27 out of 27 automated tests passed.
-The assistant handled missing API keys and mocked model failures with fallback responses.
+28 out of 28 automated tests passed.
+The assistant handled missing API keys, OpenAI/Gemini provider selection, and mocked model failures with fallback responses.
 The main limitation is retrieval quality: keyword scoring works for this small knowledge base, but may miss nuanced questions if the knowledge files grow.
 ```
 
@@ -157,6 +168,6 @@ Limitations and bias: the assistant depends on a small local knowledge base, so 
 
 Misuse risk: someone could treat the assistant as medical authority or use it to justify unsafe care decisions. The app reduces this risk by grounding answers in visible source files, keeping recommendations general, and using fallback behavior instead of hallucinating when model access fails. Future improvements should add explicit warnings for health emergencies and medication questions.
 
-Reliability surprise: the most surprising part was how much reliability came from non-AI code. Tests for retrieval ranking, context formatting, missing API keys, and model failures mattered as much as the model prompt because they controlled what information the AI received and how the app behaved when AI was unavailable.
+Reliability surprise: the most surprising part was how much reliability came from non-AI code. Tests for retrieval ranking, context formatting, provider selection, missing API keys, and model failures mattered as much as the model prompt because they controlled what information the AI received and how the app behaved when AI was unavailable.
 
-Collaboration with AI: AI was helpful in suggesting a RAG approach instead of fine-tuning because it matched the project size and made the feature easier to test. A flawed suggestion would be to make OpenAI mandatory for every answer; that would make the project less reproducible for graders or employers without API credentials, so the final design uses optional OpenAI with deterministic fallback output.
+Collaboration with AI: AI was helpful in suggesting a RAG approach instead of fine-tuning because it matched the project size and made the feature easier to test. A flawed suggestion would be to make one hosted provider mandatory for every answer; that would make the project less reproducible for graders or employers without API credentials, so the final design uses selectable providers with deterministic fallback output.

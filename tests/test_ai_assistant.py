@@ -75,6 +75,7 @@ def test_schedule_context_includes_pets_tasks_and_conflicts():
 
 def test_assistant_fallback_works_without_api_key(tmp_path, monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     knowledge_dir = write_knowledge(tmp_path)
     user = User("u1", "Jordan")
     pet = Pet("p1", "Mochi", user, "female", 3, "dog", "Shiba Inu")
@@ -85,10 +86,11 @@ def test_assistant_fallback_works_without_api_key(tmp_path, monkeypatch):
     scheduled, explanations = user.planner.make_plan(date.today())
     context = ScheduleContext.from_user(user, scheduled, explanations, [])
 
-    assistant = CareAssistant(KnowledgeBase(knowledge_dir))
+    assistant = CareAssistant(KnowledgeBase(knowledge_dir), provider="local")
     response = assistant.explain_schedule(context)
 
     assert response.used_model is False
+    assert response.provider == "local"
     assert response.error is None
     assert "Mochi" in response.answer
     assert "Walk" in response.answer
@@ -98,9 +100,11 @@ def test_assistant_fallback_works_without_api_key(tmp_path, monkeypatch):
 class FakeOpenAIClient:
     def __init__(self):
         self.last_input = None
+        self.last_model = None
         self.responses = self
 
     def create(self, model, input):
+        self.last_model = model
         self.last_input = input
 
         class Result:
@@ -121,11 +125,18 @@ def test_assistant_openai_path_uses_retrieved_context(tmp_path, monkeypatch):
     scheduled, explanations = user.planner.make_plan(date.today())
     context = ScheduleContext.from_user(user, scheduled, explanations, [])
 
-    assistant = CareAssistant(KnowledgeBase(knowledge_dir), openai_client=client)
+    assistant = CareAssistant(
+        KnowledgeBase(knowledge_dir),
+        provider="openai",
+        model="gpt-test",
+        openai_client=client,
+    )
     response = assistant.explain_schedule(context)
 
     assert response.used_model is True
+    assert response.provider == "openai"
     assert response.answer == "Model answer grounded in retrieved pet care guidance."
+    assert client.last_model == "gpt-test"
     assert "Mochi" in client.last_input
     assert "dog_care.md" in client.last_input
 
@@ -151,9 +162,58 @@ def test_assistant_falls_back_when_model_errors(tmp_path, monkeypatch):
     scheduled, explanations = user.planner.make_plan(date.today())
     context = ScheduleContext.from_user(user, scheduled, explanations, [])
 
-    assistant = CareAssistant(KnowledgeBase(knowledge_dir), openai_client=FailingOpenAIClient())
+    assistant = CareAssistant(
+        KnowledgeBase(knowledge_dir),
+        provider="openai",
+        openai_client=FailingOpenAIClient(),
+    )
     response = assistant.explain_schedule(context)
 
     assert response.used_model is False
+    assert response.provider == "local"
     assert "model unavailable" in response.error
     assert "Walk" in response.answer
+
+
+class FakeGeminiClient:
+    def __init__(self):
+        self.last_contents = None
+        self.last_model = None
+        self.models = self
+
+    def generate_content(self, model, contents):
+        self.last_model = model
+        self.last_contents = contents
+
+        class Result:
+            text = "Gemini answer grounded in retrieved pet care guidance."
+
+        return Result()
+
+
+def test_assistant_gemini_path_uses_retrieved_context(tmp_path, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    knowledge_dir = write_knowledge(tmp_path)
+    client = FakeGeminiClient()
+    user = User("u1", "Jordan")
+    pet = Pet("p1", "Mochi", user, "female", 3, "dog", "Shiba Inu")
+    user.add_pet(pet)
+    task = Task("Walk", "Morning walk", date.today(), pet)
+    user.schedule_task(task)
+    scheduled, explanations = user.planner.make_plan(date.today())
+    context = ScheduleContext.from_user(user, scheduled, explanations, [])
+
+    assistant = CareAssistant(
+        KnowledgeBase(knowledge_dir),
+        provider="gemini",
+        model="gemini-test",
+        gemini_client=client,
+    )
+    response = assistant.explain_schedule(context)
+
+    assert response.used_model is True
+    assert response.provider == "gemini"
+    assert response.answer == "Gemini answer grounded in retrieved pet care guidance."
+    assert client.last_model == "gemini-test"
+    assert "Mochi" in client.last_contents
+    assert "dog_care.md" in client.last_contents

@@ -6,7 +6,7 @@ PawPal+ is a small Python/Streamlit app for pet care scheduling.
 
 - `app.py` contains the Streamlit UI and session state flow.
 - `pawpal_system.py` contains the core domain model and scheduling logic.
-- `ai_assistant.py` contains RAG retrieval, schedule context formatting, OpenAI integration, and fallback responses.
+- `ai_assistant.py` contains RAG retrieval, schedule context formatting, OpenAI/Gemini integration, and fallback responses.
 - `main.py` provides a script-style entry point/demo flow.
 - `tests/` contains pytest coverage for tasks, recurrence, conflicts, sorting, and planning.
 - `knowledge/` contains local Markdown files used by the RAG assistant.
@@ -42,7 +42,7 @@ Run tests:
 pytest -v
 ```
 
-Optional model output requires `OPENAI_API_KEY`. Without it, the assistant uses local fallback output.
+Optional model output requires `OPENAI_API_KEY` for OpenAI or `GEMINI_API_KEY` for Gemini. Without a matching key, the assistant uses local fallback output.
 
 ## Coding Style & Naming Conventions
 
@@ -70,4 +70,4 @@ Keep commits focused on one change. Pull requests should include a brief summary
 
 ## Security & Configuration Tips
 
-Do not commit virtual environments, caches, or local secrets. Keep dependencies in `requirements.txt`. Do not hard-code `OPENAI_API_KEY`; read it from the environment.
+Do not commit virtual environments, caches, or local secrets. Keep dependencies in `requirements.txt`. Do not hard-code `OPENAI_API_KEY`, `GEMINI_API_KEY`, or `GOOGLE_API_KEY`; read them from the environment.

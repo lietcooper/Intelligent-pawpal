@@ -188,6 +188,29 @@ st.divider()
 st.subheader("AI Care Assistant")
 st.caption("Uses local pet-care guidance plus today's generated schedule.")
 
+provider_label = st.selectbox(
+    "LLM provider",
+    ["Local fallback", "OpenAI", "Gemini"],
+    help="Local fallback runs without API keys. OpenAI and Gemini use their matching environment variables.",
+)
+provider = {
+    "Local fallback": "local",
+    "OpenAI": "openai",
+    "Gemini": "gemini",
+}[provider_label]
+
+default_model = {
+    "local": "",
+    "openai": "gpt-4o-mini",
+    "gemini": "gemini-2.5-flash",
+}[provider]
+model_name = st.text_input(
+    "Model name",
+    value=default_model,
+    disabled=(provider == "local"),
+    help="OpenAI uses OPENAI_API_KEY. Gemini uses GEMINI_API_KEY or GOOGLE_API_KEY.",
+)
+
 if st.button("Explain and improve schedule"):
     if not st.session_state.pets:
         st.warning("Add at least one pet before using the assistant.")
@@ -202,7 +225,11 @@ if st.button("Explain and improve schedule"):
         else:
             conflicts = user.planner.find_conflicts(scheduled)
             context = ScheduleContext.from_user(user, scheduled, explanations, conflicts)
-            assistant = CareAssistant(KnowledgeBase())
+            assistant = CareAssistant(
+                KnowledgeBase(),
+                provider=provider,
+                model=model_name or None,
+            )
             with st.spinner("Reviewing schedule with retrieved care guidance..."):
                 st.session_state.ai_response = assistant.explain_schedule(context)
 
@@ -212,8 +239,14 @@ if st.session_state.ai_response:
     if response.sources:
         st.caption(f"Sources: {', '.join(response.sources)}")
     if response.used_model:
-        st.success("Generated with OpenAI using retrieved local guidance.")
+        st.success(
+            f"Generated with {response.provider.title()} "
+            f"({response.model}) using retrieved local guidance."
+        )
     elif response.error:
         st.warning(f"Using local fallback because the model call failed: {response.error}")
     else:
-        st.info("Using local fallback. Set OPENAI_API_KEY for model-generated output.")
+        st.info(
+            "Using local fallback. Set OPENAI_API_KEY for OpenAI or "
+            "GEMINI_API_KEY for Gemini model-generated output."
+        )

@@ -28,6 +28,8 @@ class CareAssistantResponse:
     answer: str
     sources: list
     used_model: bool
+    provider: str = "local"
+    model: str | None = None
     error: str | None = None
 
 
@@ -151,10 +153,19 @@ class KnowledgeBase:
 
 
 class CareAssistant:
-    def __init__(self, knowledge_base=None, openai_client=None, model="gpt-4o-mini"):
+    def __init__(
+        self,
+        knowledge_base=None,
+        provider="openai",
+        model=None,
+        openai_client=None,
+        gemini_client=None,
+    ):
         self.knowledge_base = knowledge_base or KnowledgeBase()
+        self.provider = provider
+        self.model = model or self._default_model(provider)
         self.openai_client = openai_client
-        self.model = model
+        self.gemini_client = gemini_client
 
     def explain_schedule(self, context):
         query = self._query_from_context(context)
@@ -165,26 +176,76 @@ class CareAssistant:
 
         logger.info("Care assistant retrieved sources: %s", sources)
 
-        if os.getenv("OPENAI_API_KEY"):
+        if self.provider == "local":
+            fallback = self._fallback_response(context, snippets)
+            return CareAssistantResponse(fallback, sources, used_model=False, provider="local")
+
+        if self.provider == "openai" and os.getenv("OPENAI_API_KEY"):
             try:
-                client = self.openai_client or self._make_openai_client()
-                result = client.responses.create(model=self.model, input=prompt)
-                answer = getattr(result, "output_text", "").strip()
+                answer = self._call_openai(prompt)
                 if answer:
-                    return CareAssistantResponse(answer, sources, used_model=True)
+                    return CareAssistantResponse(
+                        answer, sources, used_model=True,
+                        provider="openai", model=self.model,
+                    )
                 raise RuntimeError("OpenAI response was empty")
             except Exception as exc:
                 logger.exception("Model call failed; using fallback response")
                 fallback = self._fallback_response(context, snippets)
-                return CareAssistantResponse(fallback, sources, used_model=False, error=str(exc))
+                return CareAssistantResponse(
+                    fallback, sources, used_model=False,
+                    provider="local", model=self.model, error=str(exc),
+                )
+
+        if self.provider == "gemini" and (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")):
+            try:
+                answer = self._call_gemini(prompt)
+                if answer:
+                    return CareAssistantResponse(
+                        answer, sources, used_model=True,
+                        provider="gemini", model=self.model,
+                    )
+                raise RuntimeError("Gemini response was empty")
+            except Exception as exc:
+                logger.exception("Gemini call failed; using fallback response")
+                fallback = self._fallback_response(context, snippets)
+                return CareAssistantResponse(
+                    fallback, sources, used_model=False,
+                    provider="local", model=self.model, error=str(exc),
+                )
+
+        if self.provider not in ("openai", "gemini", "local"):
+            logger.warning("Unknown provider '%s'; using fallback response", self.provider)
 
         fallback = self._fallback_response(context, snippets)
-        return CareAssistantResponse(fallback, sources, used_model=False)
+        return CareAssistantResponse(fallback, sources, used_model=False, provider="local")
+
+    def _default_model(self, provider):
+        if provider == "gemini":
+            return "gemini-2.5-flash"
+        if provider == "local":
+            return None
+        return "gpt-4o-mini"
+
+    def _call_openai(self, prompt):
+        client = self.openai_client or self._make_openai_client()
+        result = client.responses.create(model=self.model, input=prompt)
+        return getattr(result, "output_text", "").strip()
+
+    def _call_gemini(self, prompt):
+        client = self.gemini_client or self._make_gemini_client()
+        result = client.models.generate_content(model=self.model, contents=prompt)
+        return getattr(result, "text", "").strip()
 
     def _make_openai_client(self):
         from openai import OpenAI
 
         return OpenAI()
+
+    def _make_gemini_client(self):
+        from google import genai
+
+        return genai.Client()
 
     def _query_from_context(self, context):
         parts = ["pet care schedule conflict priority routine"]

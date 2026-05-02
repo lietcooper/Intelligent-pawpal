@@ -23,11 +23,12 @@ KnowledgeBase retriever
   v
 CareAssistant
   |
-  | if OPENAI_API_KEY exists        | otherwise or on error
-  v                                 v
-OpenAI model call                   deterministic fallback
-  |                                 |
-  +---------------+-----------------+
+  | provider = OpenAI + OPENAI_API_KEY
+  | provider = Gemini + GEMINI_API_KEY or GOOGLE_API_KEY
+  | provider = Local fallback, missing key, or model error
+  v
+Selected LLM provider or deterministic fallback
+  |
                   |
                   v
 Grounded schedule explanation with source filenames
@@ -37,5 +38,5 @@ Human reviews recommendations in Streamlit
 
 Testing loop:
 pytest -> retrieval ranking, context formatting, fallback output,
-mocked OpenAI calls, and existing scheduling behavior.
+mocked OpenAI/Gemini calls, and existing scheduling behavior.
 ```
