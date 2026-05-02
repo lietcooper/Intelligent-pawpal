@@ -1,6 +1,8 @@
 # PawPal+ RAG Care Assistant
 
-PawPal+ is a Streamlit app that helps pet owners organize daily care tasks across multiple pets. The original Modules 1-3 project focused on scheduling: users could add pets, create tasks, detect time conflicts, auto-schedule recurring tasks, and generate a conflict-aware daily plan.
+**Base project:** PawPal+, the original Modules 1-3 Streamlit pet-care scheduler.
+
+PawPal+ helps pet owners organize daily care tasks across multiple pets. The original project let users add pets, create tasks, detect time conflicts, auto-schedule recurring tasks, and generate a conflict-aware daily plan.
 
 This version adds a RAG Care Assistant. After a schedule is generated, the assistant retrieves local pet-care guidance, combines it with the current pets, tasks, schedule, and conflicts, then explains risks and recommends improvements. This makes the planner more useful because it does not only arrange tasks; it helps owners understand the quality of the plan.
 
@@ -160,14 +162,4 @@ The main limitation is retrieval quality: keyword scoring works for this small k
 
 This project showed that useful AI features do not have to start with a large system. A small RAG layer can make an existing planner more helpful by grounding advice in both app state and curated guidance.
 
-The biggest lesson was reliability. The assistant needed guardrails for missing schedules, missing API keys, failed model calls, and test isolation. Designing those paths made the AI feature easier to trust and easier for another developer to run.
-
-## Reflection and Ethics
-
-Limitations and bias: the assistant depends on a small local knowledge base, so its advice reflects what is written in `knowledge/`. It may underrepresent unusual pets, medical needs, disabilities, breed-specific concerns, or emergency situations. It should not replace a veterinarian or professional pet-care advice.
-
-Misuse risk: someone could treat the assistant as medical authority or use it to justify unsafe care decisions. The app reduces this risk by grounding answers in visible source files, keeping recommendations general, and using fallback behavior instead of hallucinating when model access fails. Future improvements should add explicit warnings for health emergencies and medication questions.
-
-Reliability surprise: the most surprising part was how much reliability came from non-AI code. Tests for retrieval ranking, context formatting, provider selection, missing API keys, and model failures mattered as much as the model prompt because they controlled what information the AI received and how the app behaved when AI was unavailable.
-
-Collaboration with AI: AI was helpful in suggesting a RAG approach instead of fine-tuning because it matched the project size and made the feature easier to test. A flawed suggestion would be to make one hosted provider mandatory for every answer; that would make the project less reproducible for graders or employers without API credentials, so the final design uses selectable providers with deterministic fallback output.
+The full AI reflection, ethics review, bias discussion, collaboration notes, and testing results are documented in [model_card.md](model_card.md).
