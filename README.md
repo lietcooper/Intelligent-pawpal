@@ -1,101 +1,162 @@
-# PawPal+ User Manual
-![alt text](demo.png)
+# PawPal+ RAG Care Assistant
 
-PawPal+ is a Streamlit app that helps pet owners plan and schedule daily care tasks across multiple pets. It generates a conflict-free daily schedule, flags time overlaps, and auto-schedules recurring tasks.
+PawPal+ is a Streamlit app that helps pet owners organize daily care tasks across multiple pets. The original Modules 1-3 project focused on scheduling: users could add pets, create tasks, detect time conflicts, auto-schedule recurring tasks, and generate a conflict-aware daily plan.
 
----
+This version adds a RAG Care Assistant. After a schedule is generated, the assistant retrieves local pet-care guidance, combines it with the current pets, tasks, schedule, and conflicts, then explains risks and recommends improvements. This makes the planner more useful because it does not only arrange tasks; it helps owners understand the quality of the plan.
 
-## Table of Contents
+## Architecture Overview
 
-1. [Getting Started](#getting-started)
-2. [Features](#features)
-3. [Using the App](#using-the-app)
-4. [Running Tests](#running-tests)
+The system diagram is in [assets/rag_architecture.md](assets/rag_architecture.md).
 
----
+The data flow is:
 
-## Getting Started
+1. A human user adds pets and care tasks in `app.py`.
+2. `pawpal_system.py` generates a daily schedule and conflict report.
+3. `ScheduleContext` converts the current app state into text.
+4. `KnowledgeBase` retrieves relevant Markdown guidance from `knowledge/`.
+5. `CareAssistant` sends the grounded prompt to OpenAI when `OPENAI_API_KEY` is set.
+6. If no key exists or the model call fails, the assistant returns a deterministic local fallback.
+7. The user reviews the answer and source filenames in Streamlit.
 
-### Requirements
+Tests check retrieval, fallback behavior, mocked model calls, and the original planner logic.
+
+## Setup Instructions
+
+Requirements:
 
 - Python 3.10+
-- Dependencies listed in `requirements.txt`
+- Dependencies in `requirements.txt`
+- Optional OpenAI API key for model-generated responses
 
-### Setup
+Install and run:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate       # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The app opens in your browser at `http://localhost:8501`.
-
----
-
-## Features
-
-### Priority-based scheduling
-Tasks are assigned time slots greedily by priority (`high → medium → low`). High-priority tasks are placed first in the day, ensuring critical care (medications, vet appointments) is never pushed out by lower-priority tasks.
-
-### Preferred-time scheduling
-A task can be given a preferred start time (e.g. "Walk at 8:00 AM"). The scheduler honors that time when the slot is free. If the slot is already taken, the task is automatically moved to the next available opening and labeled accordingly in the schedule view.
-
-### Conflict warnings on task add
-When a new task is added, the app immediately checks whether its time window overlaps any existing task on the same day. If a conflict is detected, a yellow warning banner appears with the names, times, and whether the affected tasks belong to the same pet or different pets — before the schedule is even generated.
-
-### Conflict detection across pets
-`find_conflicts()` performs a pairwise scan of all scheduled tasks and identifies both same-pet and cross-pet time overlaps. After generating a schedule, any remaining conflicts are displayed as individual warning cards showing both task names, pet names, and exact time windows.
-
-### Daily and weekly recurrence
-Tasks can be marked as `daily` or `weekly`. When a recurring task is completed, the system automatically creates the next occurrence with the correct due date and identical settings (priority, duration, preferred time), and adds it to the planner without any manual input.
-
-### Sorted task view
-The pending task list is always displayed in time order: tasks with a confirmed `scheduled_start` appear first, followed by tasks with only a `preferred_time`, followed by tasks with no time set. This gives owners a at-a-glance view of the day before generating the full schedule.
-
-### Greedy slot-finding
-`make_plan()` uses a linear scan over sorted occupied intervals to find the earliest available slot for each task. This avoids re-scanning the full task list on every conflict and keeps scheduling fast even with many tasks in a day.
-
-### Day boundary enforcement
-The planner operates within a configurable day window (default 7:00 AM – 9:00 PM). Tasks whose duration cannot fit within the remaining window are skipped rather than scheduled past the end of the day.
-
----
-
-## Using the App
-
-### 1. Set your name
-Enter your name in the **Owner** field at the top.
-
-### 2. Add pets
-Fill in the pet's name, species, breed, and age, then click **Add pet**. You can add multiple pets.
-
-### 3. Add tasks
-For each task:
-- Enter a title and choose which pet it is for.
-- Set the duration (minutes) and priority.
-- Optionally check **Set a preferred time** to pin the task to a specific time slot.
-- Optionally set a **Recurrence** (`daily` or `weekly`) for tasks that repeat.
-- Click **Add task**.
-
-If the new task overlaps an existing one, a warning appears immediately with details about the conflict.
-
-### 4. Review pending tasks
-The **Pending Tasks** table shows all unscheduled tasks sorted by time. Tasks with a preferred time show it labeled `(preferred)`. Tasks with no time show `—`.
-
-### 5. Generate the schedule
-Click **Generate schedule**. The app runs `make_plan()` and displays each task as a colored block:
-- **Green** (`st.success`) — task was placed at its preferred time.
-- **Yellow** (`st.warning`) — task was moved to the next available slot due to a conflict.
-
-Any remaining time overlaps are listed below the schedule as individual conflict cards.
-
----
-
-## Running Tests
+Optional model setup:
 
 ```bash
-pytest tests/test_pawpal.py -v
+export OPENAI_API_KEY="your-api-key"
+streamlit run app.py
 ```
 
-Tests cover: task status lifecycle, recurring task spawning and field inheritance, month-boundary rollover, same-pet and cross-pet conflict detection, adjacent task boundaries, `sort_by_time` tier ordering, `make_plan` preferred-time honoring, fallback slot assignment, day-boundary overflow, and priority ordering for flexible tasks.
+Run tests:
+
+```bash
+pytest -v
+```
+
+## Sample Interactions
+
+### Example 1: Dog schedule with no conflicts
+
+Input schedule:
+
+- Mochi, dog
+- 8:00 AM Walk, high priority
+- 9:00 AM Breakfast, medium priority
+
+Sample AI output:
+
+```text
+Summary: Mochi has 2 scheduled tasks: Walk, Breakfast.
+
+Risk check: I did not find schedule conflicts in the generated plan.
+
+Recommendation: Dogs benefit from predictable routines for feeding, walks, medication, hydration, and rest.
+
+Sources used: dog_care.md, schedule_guidelines.md
+```
+
+### Example 2: Crowded schedule with overlapping preferred times
+
+Input schedule:
+
+- Mochi, dog
+- Luna, cat
+- Walk and Feed both requested around 9:00 AM
+
+Sample AI output:
+
+```text
+Summary: Mochi, Luna has 2 scheduled tasks: Walk, Feed.
+
+Risk check: I found 1 conflict(s). Move flexible or lower-priority tasks first, and keep high-priority care in place.
+
+Recommendation: Protect high-priority tasks first, especially medication, meals, vet care, and time-sensitive routines.
+
+Sources used: schedule_guidelines.md, dog_care.md, cat_care.md
+```
+
+### Example 3: No OpenAI key
+
+Input:
+
+- User clicks `Explain and improve schedule` without setting `OPENAI_API_KEY`.
+
+Result:
+
+```text
+The app still returns a local fallback response with retrieved source filenames.
+```
+
+## Design Decisions
+
+- Local Markdown RAG keeps the project easy to run and inspect.
+- Keyword retrieval was chosen over a vector database because the knowledge base is small.
+- OpenAI is optional so graders and contributors can run the app without credentials.
+- The AI logic lives in `ai_assistant.py` instead of `app.py` so it can be tested directly.
+- Tests mock the model path to avoid network calls and keep results reproducible.
+
+## Testing Summary
+
+The test suite covers:
+
+- Knowledge loading from Markdown files
+- Species-aware retrieval ranking
+- Scheduling guidance retrieval for conflicts
+- Schedule context formatting
+- Local fallback output without an API key
+- Mocked OpenAI model calls
+- Model error fallback behavior
+- Existing task lifecycle, recurrence, conflict detection, sorting, and scheduling behavior
+
+What worked well: service-layer testing made the RAG feature easy to verify before UI integration. The fallback path also made the app reliable when credentials are missing.
+
+What was limited: keyword retrieval is simple and transparent, but it is less flexible than embeddings for larger knowledge bases.
+
+## Reliability and Evaluation
+
+The RAG Care Assistant is evaluated with automated tests, logging, error handling, and human review in the Streamlit UI.
+
+- Automated tests: `pytest -v` currently runs 27 tests. The AI-specific tests check Markdown loading, species-aware retrieval, conflict-guidance retrieval, schedule context formatting, local fallback output, mocked OpenAI output, and model-error fallback.
+- Logging and error handling: `ai_assistant.py` logs loaded knowledge, retrieved source files, and model-call failures. If OpenAI is unavailable or returns an error, the app falls back to a deterministic local response instead of crashing.
+- Human evaluation: the Streamlit UI shows the answer and source filenames, so a reviewer can check whether the recommendation is grounded in retrieved guidance and the actual schedule.
+
+Latest evaluation summary:
+
+```text
+27 out of 27 automated tests passed.
+The assistant handled missing API keys and mocked model failures with fallback responses.
+The main limitation is retrieval quality: keyword scoring works for this small knowledge base, but may miss nuanced questions if the knowledge files grow.
+```
+
+## Reflection
+
+This project showed that useful AI features do not have to start with a large system. A small RAG layer can make an existing planner more helpful by grounding advice in both app state and curated guidance.
+
+The biggest lesson was reliability. The assistant needed guardrails for missing schedules, missing API keys, failed model calls, and test isolation. Designing those paths made the AI feature easier to trust and easier for another developer to run.
+
+## Reflection and Ethics
+
+Limitations and bias: the assistant depends on a small local knowledge base, so its advice reflects what is written in `knowledge/`. It may underrepresent unusual pets, medical needs, disabilities, breed-specific concerns, or emergency situations. It should not replace a veterinarian or professional pet-care advice.
+
+Misuse risk: someone could treat the assistant as medical authority or use it to justify unsafe care decisions. The app reduces this risk by grounding answers in visible source files, keeping recommendations general, and using fallback behavior instead of hallucinating when model access fails. Future improvements should add explicit warnings for health emergencies and medication questions.
+
+Reliability surprise: the most surprising part was how much reliability came from non-AI code. Tests for retrieval ranking, context formatting, missing API keys, and model failures mattered as much as the model prompt because they controlled what information the AI received and how the app behaved when AI was unavailable.
+
+Collaboration with AI: AI was helpful in suggesting a RAG approach instead of fine-tuning because it matched the project size and made the feature easier to test. A flawed suggestion would be to make OpenAI mandatory for every answer; that would make the project less reproducible for graders or employers without API credentials, so the final design uses optional OpenAI with deterministic fallback output.

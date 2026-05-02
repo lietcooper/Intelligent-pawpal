@@ -1,5 +1,6 @@
 import streamlit as st
 from datetime import date, time
+from ai_assistant import CareAssistant, KnowledgeBase, ScheduleContext
 from pawpal_system import User, Pet, Task
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
@@ -13,6 +14,8 @@ if "tasks" not in st.session_state:
     st.session_state.tasks = []
 if "schedule" not in st.session_state:
     st.session_state.schedule = None  # (scheduled_tasks, explanations)
+if "ai_response" not in st.session_state:
+    st.session_state.ai_response = None
 
 user = st.session_state.user
 
@@ -97,6 +100,7 @@ else:
         st.session_state.tasks.append(task)
         # Reset cached schedule so stale results aren't shown
         st.session_state.schedule = None
+        st.session_state.ai_response = None
 
         if warning:
             st.warning(
@@ -142,6 +146,7 @@ if st.button("Generate schedule"):
     else:
         scheduled, explanations = user.planner.make_plan(date.today())
         st.session_state.schedule = (scheduled, explanations)
+        st.session_state.ai_response = None
 
 if st.session_state.schedule:
     scheduled, explanations = st.session_state.schedule
@@ -177,3 +182,38 @@ if st.session_state.schedule:
                 )
         else:
             st.info("No conflicts — your schedule looks clean!")
+
+# --- RAG Care Assistant ---
+st.divider()
+st.subheader("AI Care Assistant")
+st.caption("Uses local pet-care guidance plus today's generated schedule.")
+
+if st.button("Explain and improve schedule"):
+    if not st.session_state.pets:
+        st.warning("Add at least one pet before using the assistant.")
+    elif not st.session_state.tasks:
+        st.warning("Add at least one task before using the assistant.")
+    elif not st.session_state.schedule:
+        st.warning("Generate a schedule before using the assistant.")
+    else:
+        scheduled, explanations = st.session_state.schedule
+        if not scheduled:
+            st.warning("Generate a schedule with at least one scheduled task first.")
+        else:
+            conflicts = user.planner.find_conflicts(scheduled)
+            context = ScheduleContext.from_user(user, scheduled, explanations, conflicts)
+            assistant = CareAssistant(KnowledgeBase())
+            with st.spinner("Reviewing schedule with retrieved care guidance..."):
+                st.session_state.ai_response = assistant.explain_schedule(context)
+
+if st.session_state.ai_response:
+    response = st.session_state.ai_response
+    st.write(response.answer)
+    if response.sources:
+        st.caption(f"Sources: {', '.join(response.sources)}")
+    if response.used_model:
+        st.success("Generated with OpenAI using retrieved local guidance.")
+    elif response.error:
+        st.warning(f"Using local fallback because the model call failed: {response.error}")
+    else:
+        st.info("Using local fallback. Set OPENAI_API_KEY for model-generated output.")
